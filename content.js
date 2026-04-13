@@ -1,8 +1,324 @@
-let formula = "";
+const VALID_ELEMENTS = new Set([
+  "H",
+  "He",
+  "Li",
+  "Be",
+  "B",
+  "C",
+  "N",
+  "O",
+  "F",
+  "Ne",
+  "Na",
+  "Mg",
+  "Al",
+  "Si",
+  "P",
+  "S",
+  "Cl",
+  "Ar",
+  "K",
+  "Ca",
+  "Sc",
+  "Ti",
+  "V",
+  "Cr",
+  "Mn",
+  "Fe",
+  "Co",
+  "Ni",
+  "Cu",
+  "Zn",
+  "Ga",
+  "Ge",
+  "As",
+  "Se",
+  "Br",
+  "Kr",
+  "Rb",
+  "Sr",
+  "Y",
+  "Zr",
+  "Nb",
+  "Mo",
+  "Tc",
+  "Ru",
+  "Rh",
+  "Pd",
+  "Ag",
+  "Cd",
+  "In",
+  "Sn",
+  "Sb",
+  "Te",
+  "I",
+  "Xe",
+  "Cs",
+  "Ba",
+  "La",
+  "Ce",
+  "Pr",
+  "Nd",
+  "Pm",
+  "Sm",
+  "Eu",
+  "Gd",
+  "Tb",
+  "Dy",
+  "Ho",
+  "Er",
+  "Tm",
+  "Yb",
+  "Lu",
+  "Hf",
+  "Ta",
+  "W",
+  "Re",
+  "Os",
+  "Ir",
+  "Pt",
+  "Au",
+  "Hg",
+  "Tl",
+  "Pb",
+  "Bi",
+  "Po",
+  "At",
+  "Rn",
+  "Fr",
+  "Ra",
+  "Ac",
+  "Th",
+  "Pa",
+  "U",
+  "Np",
+  "Pu",
+  "Am",
+  "Cm",
+  "Bk",
+  "Cf",
+  "Es",
+  "Fm",
+  "Md",
+  "No",
+  "Lr",
+  "Rf",
+  "Db",
+  "Sg",
+  "Bh",
+  "Hs",
+  "Mt",
+  "Ds",
+  "Rg",
+  "Cn",
+  "Nh",
+  "Fl",
+  "Mc",
+  "Lv",
+  "Ts",
+  "Og",
+]);
+
 let formulaArray = [];
 let element = "";
+let attachedDoc = null;
 
-function handleKeydown(event) {
+function isDigit(str) {
+  return typeof str === "string" && /^\d$/.test(str);
+}
+
+function isLetter(str) {
+  return typeof str === "string" && /^[a-z]$/i.test(str);
+}
+
+function format_formula() {
+  return formulaArray.join("");
+}
+
+function isChemicalFormula(formula) {
+  if (!formula || typeof formula !== "string") return false;
+  if (/\s/.test(formula)) return false;
+
+  let i = 0;
+  let parenBalance = 0;
+  let sawElement = false;
+  let lastTokenType = null; // "element" | "openParen" | "closeParen"
+
+  while (i < formula.length) {
+    const ch = formula[i];
+
+    if (ch === "(") {
+      if (lastTokenType === "element" || lastTokenType === "closeParen") {
+        return false;
+      }
+
+      parenBalance++;
+      lastTokenType = "openParen";
+      i++;
+      continue;
+    }
+
+    if (ch === ")") {
+      if (parenBalance === 0) return false;
+      if (lastTokenType === "openParen") return false;
+
+      parenBalance--;
+      i++;
+      lastTokenType = "closeParen";
+
+      let num = "";
+      while (i < formula.length && /\d/.test(formula[i])) {
+        num += formula[i];
+        i++;
+      }
+
+      if (num.startsWith("0")) return false;
+      continue;
+    }
+
+    if (/[A-Z]/.test(ch)) {
+      let symbol = ch;
+
+      if (i + 1 < formula.length && /[a-z]/.test(formula[i + 1])) {
+        symbol += formula[i + 1];
+      }
+
+      if (symbol.length === 2 && !VALID_ELEMENTS.has(symbol)) {
+        symbol = ch;
+      }
+
+      if (!VALID_ELEMENTS.has(symbol)) return false;
+
+      sawElement = true;
+      lastTokenType = "element";
+      i += symbol.length;
+
+      let num = "";
+      while (i < formula.length && /\d/.test(formula[i])) {
+        num += formula[i];
+        i++;
+      }
+
+      if (num.startsWith("0")) return false;
+      continue;
+    }
+
+    return false;
+  }
+
+  return sawElement && parenBalance === 0 && lastTokenType !== "openParen";
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function buildFormulaClipboardData(tokens) {
+  let plainText = "";
+  let htmlText = "";
+
+  for (const token of tokens) {
+    const value = String(token);
+
+    for (const ch of value) {
+      plainText += ch;
+
+      if (/\d/.test(ch)) {
+        htmlText += `<span style="font-size:0.6em;vertical-align:sub;">${escapeHtml(ch)}</span>`;
+      } else {
+        htmlText += escapeHtml(ch);
+      }
+    }
+  }
+
+  plainText += " ";
+  htmlText += " ";
+
+  const wrappedHtml = `<span style="font-size: 11pt; font-family: Arial, sans-serif; background-color: transparent; font-variant: normal; vertical-align: baseline; white-space: pre-wrap;">${htmlText}</span>`;
+
+  return {
+    plainText,
+    htmlText: wrappedHtml,
+  };
+}
+
+async function copyFormulaToClipboard(tokens) {
+  const { plainText, htmlText } = buildFormulaClipboardData(tokens);
+
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      "text/plain": new Blob([plainText], { type: "text/plain" }),
+      "text/html": new Blob([htmlText], { type: "text/html" }),
+    }),
+  ]);
+}
+
+function getFormulaCharCount(tokens) {
+  return tokens.map(String).join("").length;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getDocsTarget() {
+  const iframe = document.querySelector("iframe.docs-texteventtarget-iframe");
+  if (!iframe) return null;
+
+  try {
+    return iframe.contentDocument || null;
+  } catch {
+    return null;
+  }
+}
+
+function dispatchKey(targetDoc, key, code, options = {}) {
+  const eventInit = {
+    key,
+    code,
+    keyCode: options.keyCode ?? 0,
+    which: options.which ?? 0,
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    ctrlKey: !!options.ctrlKey,
+    metaKey: !!options.metaKey,
+    shiftKey: !!options.shiftKey,
+    altKey: !!options.altKey,
+  };
+
+  targetDoc.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+  targetDoc.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+}
+
+async function highlightPreviousFormulaInDocs(charCount) {
+  const targetDoc = getDocsTarget();
+  if (!targetDoc) return;
+
+  for (let i = 0; i < charCount; i++) {
+    dispatchKey(targetDoc, "ArrowLeft", "ArrowLeft", {
+      keyCode: 37,
+      which: 37,
+      shiftKey: true,
+    });
+    await sleep(8);
+  }
+}
+
+function resetFormulaTracking() {
+  formulaArray = [];
+  element = "";
+}
+
+async function handleKeydown(event) {
+  const isModifierShortcut = event.ctrlKey || event.metaKey || event.altKey;
+  if (isModifierShortcut) {
+    return;
+  }
+
   if (event.key === " ") {
     if (element.length > 0) {
       formulaArray.push(element);
@@ -10,23 +326,36 @@ function handleKeydown(event) {
     }
 
     const formattedFormula = format_formula();
+
     if (isChemicalFormula(formattedFormula)) {
-      copyFormulaToClipboard(formulaArray);
-      showToast("Formatted formula copied. Paste to replace.");
+      event.preventDefault();
+
+      try {
+        const tokens = [...formulaArray];
+        await copyFormulaToClipboard(tokens);
+        await highlightPreviousFormulaInDocs(getFormulaCharCount(tokens));
+      } catch (err) {
+        console.error("Formula highlight/copy failed:", err);
+      }
+    } else {
+      resetFormulaTracking();
+      return;
     }
-    formula = "";
-    element = "";
-    formulaArray = [];
+
+    resetFormulaTracking();
     return;
   }
 
   if (event.key === "Backspace") {
     if (element.length > 0) {
-      element = element.substring(0, element.length - 1);
+      element = element.slice(0, -1);
     } else if (formulaArray.length > 0) {
       formulaArray.pop();
     }
-  } else if (event.key.length === 1) {
+    return;
+  }
+
+  if (event.key.length === 1) {
     if (isLetter(event.key)) {
       if (event.key === event.key.toLowerCase()) {
         element += event.key;
@@ -36,96 +365,33 @@ function handleKeydown(event) {
         }
         element = event.key;
       }
-    } else if (isDigit(event.key)) {
+      return;
+    }
+
+    if (isDigit(event.key)) {
       if (element.length > 0) {
         formulaArray.push(element);
         element = "";
       }
       formulaArray.push(event.key);
-    } else if (event.key === "(" || event.key === ")") {
+      return;
+    }
+
+    if (event.key === "(" || event.key === ")") {
       if (element.length > 0) {
         formulaArray.push(element);
         element = "";
       }
       formulaArray.push(event.key);
+      return;
     }
+
+    resetFormulaTracking();
   }
-}
-
-document.addEventListener("keydown", handleKeydown);
-
-function format_formula() {
-  let formattedFormula = "";
-  for (let i = 0; i < formulaArray.length; i++) {
-    formattedFormula += formulaArray[i];
-  }
-  return formattedFormula;
-}
-
-function isChemicalFormula(formula) {
-  return true; // Placeholder: Implement actual validation logic if needed
-}
-
-function handleReplacement() {}
-
-function isDigit(str) {
-  if (typeof str != "string") return false;
-  return !isNaN(str) && !isNaN(parseFloat(str));
-}
-
-function isLetter(str) {
-  return str.length === 1 && str.match(/[a-z]/i);
-}
-
-let attachedDoc = null;
-let toastEl = null;
-let fadeTimeout = null;
-let removeTimeout = null;
-
-function showToast(message, doc = document) {
-  if (!doc || !doc.documentElement) return;
-
-  if (!toastEl || toastEl.ownerDocument !== doc) {
-    toastEl = doc.createElement("div");
-    toastEl.style.position = "fixed";
-    toastEl.style.bottom = "20px";
-    toastEl.style.left = "20px";
-    toastEl.style.zIndex = "2147483647";
-    toastEl.style.background = "rgba(30, 30, 30, 0.9)";
-    toastEl.style.color = "#fff";
-    toastEl.style.padding = "8px 12px";
-    toastEl.style.borderRadius = "10px";
-    toastEl.style.fontSize = "14px";
-    toastEl.style.fontFamily = "Arial, sans-serif";
-    toastEl.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.25)";
-    toastEl.style.transition = "opacity 0.3s ease";
-    toastEl.style.opacity = "0";
-    doc.documentElement.appendChild(toastEl);
-  }
-
-  toastEl.textContent = message;
-  toastEl.style.opacity = "1";
-
-  clearTimeout(fadeTimeout);
-  clearTimeout(removeTimeout);
-
-  fadeTimeout = setTimeout(() => {
-    toastEl.style.opacity = "0";
-  }, 2000);
-
-  removeTimeout = setTimeout(() => {
-    if (toastEl) {
-      toastEl.remove();
-      toastEl = null;
-    }
-  }, 2300);
 }
 
 function handleDocsKeydown(event) {
-  if (event.key === " ") {
-    console.log("space detected in docs iframe");
-    showToast("Formatted formula copied. Paste to replace.", document);
-  }
+  handleKeydown(event);
 }
 
 function attachDocsListener() {
@@ -160,47 +426,3 @@ observer.observe(document.documentElement, {
   childList: true,
   subtree: true,
 });
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function buildFormulaClipboardData(formulaArray) {
-  let plainText = "";
-  let htmlText = "";
-
-  for (const token of formulaArray) {
-    const value = String(token);
-
-    for (const ch of value) {
-      plainText += ch;
-
-      if (/\d/.test(ch)) {
-        htmlText += `<span style="font-size:0.6em;vertical-align:sub;">${ch}</span>`;
-      } else {
-        htmlText += escapeHtml(ch);
-      }
-    }
-  }
-
-  const wrappedHtml = `<span style="font-size: 11pt; font-family: Arial, sans-serif; background-color: transparent; font-variant: normal; vertical-align: baseline; white-space: pre-wrap;">${htmlText}</span>`;
-
-  return {
-    plainText,
-    htmlText: wrappedHtml,
-  };
-}
-
-async function copyFormulaToClipboard(formulaArray) {
-  const { plainText, htmlText } = buildFormulaClipboardData(formulaArray);
-
-  await navigator.clipboard.write([
-    new ClipboardItem({
-      "text/plain": new Blob([plainText], { type: "text/plain" }),
-      "text/html": new Blob([htmlText], { type: "text/html" }),
-    }),
-  ]);
-}
