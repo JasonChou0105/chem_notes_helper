@@ -1,124 +1,3 @@
-const VALID_ELEMENTS = new Set([
-  "H",
-  "He",
-  "Li",
-  "Be",
-  "B",
-  "C",
-  "N",
-  "O",
-  "F",
-  "Ne",
-  "Na",
-  "Mg",
-  "Al",
-  "Si",
-  "P",
-  "S",
-  "Cl",
-  "Ar",
-  "K",
-  "Ca",
-  "Sc",
-  "Ti",
-  "V",
-  "Cr",
-  "Mn",
-  "Fe",
-  "Co",
-  "Ni",
-  "Cu",
-  "Zn",
-  "Ga",
-  "Ge",
-  "As",
-  "Se",
-  "Br",
-  "Kr",
-  "Rb",
-  "Sr",
-  "Y",
-  "Zr",
-  "Nb",
-  "Mo",
-  "Tc",
-  "Ru",
-  "Rh",
-  "Pd",
-  "Ag",
-  "Cd",
-  "In",
-  "Sn",
-  "Sb",
-  "Te",
-  "I",
-  "Xe",
-  "Cs",
-  "Ba",
-  "La",
-  "Ce",
-  "Pr",
-  "Nd",
-  "Pm",
-  "Sm",
-  "Eu",
-  "Gd",
-  "Tb",
-  "Dy",
-  "Ho",
-  "Er",
-  "Tm",
-  "Yb",
-  "Lu",
-  "Hf",
-  "Ta",
-  "W",
-  "Re",
-  "Os",
-  "Ir",
-  "Pt",
-  "Au",
-  "Hg",
-  "Tl",
-  "Pb",
-  "Bi",
-  "Po",
-  "At",
-  "Rn",
-  "Fr",
-  "Ra",
-  "Ac",
-  "Th",
-  "Pa",
-  "U",
-  "Np",
-  "Pu",
-  "Am",
-  "Cm",
-  "Bk",
-  "Cf",
-  "Es",
-  "Fm",
-  "Md",
-  "No",
-  "Lr",
-  "Rf",
-  "Db",
-  "Sg",
-  "Bh",
-  "Hs",
-  "Mt",
-  "Ds",
-  "Rg",
-  "Cn",
-  "Nh",
-  "Fl",
-  "Mc",
-  "Lv",
-  "Ts",
-  "Og",
-]);
-
 let formulaArray = [];
 let element = "";
 let attachedDoc = null;
@@ -136,77 +15,57 @@ function format_formula() {
 }
 
 function isChemicalFormula(formula) {
-  if (!formula || typeof formula !== "string") return false;
-  if (/\s/.test(formula)) return false;
+  if (!formula || /\s/.test(formula)) return false;
 
   let i = 0;
   let parenBalance = 0;
   let sawElement = false;
-  let lastTokenType = null; // "element" | "openParen" | "closeParen"
 
   while (i < formula.length) {
     const ch = formula[i];
 
     if (ch === "(") {
-      if (lastTokenType === "element" || lastTokenType === "closeParen") {
-        return false;
-      }
-
       parenBalance++;
-      lastTokenType = "openParen";
       i++;
       continue;
     }
 
     if (ch === ")") {
-      if (parenBalance === 0) return false;
-      if (lastTokenType === "openParen") return false;
-
       parenBalance--;
+      if (parenBalance < 0) return false;
       i++;
-      lastTokenType = "closeParen";
 
       let num = "";
       while (i < formula.length && /\d/.test(formula[i])) {
         num += formula[i];
         i++;
       }
-
-      if (num.startsWith("0")) return false;
+      if (num === "0") return false;
       continue;
     }
 
     if (/[A-Z]/.test(ch)) {
-      let symbol = ch;
-
-      if (i + 1 < formula.length && /[a-z]/.test(formula[i + 1])) {
-        symbol += formula[i + 1];
-      }
-
-      if (symbol.length === 2 && !VALID_ELEMENTS.has(symbol)) {
-        symbol = ch;
-      }
-
-      if (!VALID_ELEMENTS.has(symbol)) return false;
-
       sawElement = true;
-      lastTokenType = "element";
-      i += symbol.length;
+      i++;
+
+      if (i < formula.length && /[a-z]/.test(formula[i])) {
+        i++;
+      }
 
       let num = "";
       while (i < formula.length && /\d/.test(formula[i])) {
         num += formula[i];
         i++;
       }
+      if (num === "0") return false;
 
-      if (num.startsWith("0")) return false;
       continue;
     }
 
     return false;
   }
 
-  return sawElement && parenBalance === 0 && lastTokenType !== "openParen";
+  return sawElement && parenBalance === 0;
 }
 
 function escapeHtml(str) {
@@ -237,7 +96,7 @@ function buildFormulaClipboardData(tokens) {
   plainText += " ";
   htmlText += " ";
 
-  const wrappedHtml = `<span style="font-size: 11pt; font-family: Arial, sans-serif; background-color: transparent; font-variant: normal; vertical-align: baseline; white-space: pre-wrap;">${htmlText}</span>`;
+  const wrappedHtml = `<span style="font-size: 11pt; font-family: Times New Roman, sans-serif; background-color: transparent; font-variant: normal; vertical-align: baseline; white-space: pre-wrap;">${htmlText}</span>`;
 
   return {
     plainText,
@@ -318,14 +177,12 @@ async function handleKeydown(event) {
   if (isModifierShortcut) {
     return;
   }
-
-  if (event.key === " ") {
+  const formattedFormula = format_formula();
+  if (event.key === " " && /\d/.test(formattedFormula)) {
     if (element.length > 0) {
       formulaArray.push(element);
       element = "";
     }
-
-    const formattedFormula = format_formula();
 
     if (isChemicalFormula(formattedFormula)) {
       event.preventDefault();
@@ -373,7 +230,16 @@ async function handleKeydown(event) {
         formulaArray.push(element);
         element = "";
       }
-      formulaArray.push(event.key);
+
+      const last = formulaArray[formulaArray.length - 1];
+
+      // If last token is already a number, append to it
+      if (last && /^\d+$/.test(last)) {
+        formulaArray[formulaArray.length - 1] = last + event.key;
+      } else {
+        formulaArray.push(event.key);
+      }
+
       return;
     }
 
